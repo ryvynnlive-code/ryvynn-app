@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  credentials   Credential[]
+  confessions   Confession[]
+  miracles      Miracle[]
+  subscriptions Subscription[]
+  soulTokens    SoulToken[]
+}
+
+model Credential {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  key       String
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, type])
+}
+
+model Confession {
+  id          String    @id @default(cuid())
+  content     String    @db.Text
+  userId      String?
+  anonymous   Boolean   @default(true)
+  crisisLevel Int       @default(0)
+  createdAt   DateTime  @default(now())
+  
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  miracles Miracle[]
+  
+  @@index([createdAt])
+  @@index([crisisLevel])
+}
+
+model Miracle {
+  id           String   @id @default(cuid())
+  confessionId String
+  content      String   @db.Text
+  userId       String?
+  blessings    Int      @default(0)
+  createdAt    DateTime @default(now())
+  
+  confession Confession @relation(fields: [confessionId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([createdAt])
+  @@index([blessings])
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  userId             String
+  stripeCustomerId   String    @unique
+  stripeSubscriptionId String? @unique
+  stripePriceId      String?
+  stripeCurrentPeriodEnd DateTime?
+  tier               String    @default("FREE")
+  status             String    @default("active")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model SoulToken {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int      @default(0)
+  reason    String?
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}

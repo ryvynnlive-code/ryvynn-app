@@ -85,44 +85,63 @@ export async function POST(request: NextRequest) {
     console.log("Crisis Detection:", crisisDetection);
     console.log("Emotional Phase:", emotionalPhase);
 
-    // SAVE CONFESSION TO DATABASE
-    const confessionRecord = await prisma.confession.create({
-      data: {
-        content: confession,
-        mood,
-        anonymous: true,
-        crisisLevel: crisisDetection.level,
-        crisisKeywords: crisisDetection.keywords,
-        emotionalPhase,
-      },
-    });
+    let confessionRecord = null;
+    let miracleRecord = null;
+
+    // TRY to save to database, but continue if it fails
+    try {
+      confessionRecord = await prisma.confession.create({
+        data: {
+          content: confession,
+          mood,
+          anonymous: true,
+          crisisLevel: crisisDetection.level,
+          crisisKeywords: crisisDetection.keywords,
+          emotionalPhase,
+        },
+      });
+    } catch (dbError) {
+      console.error("Database save failed (continuing anyway):", dbError);
+    }
 
     // GENERATE MIRACLE using Claude Sonnet 4
-    const completion = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: MAR_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Transform this confession into a miracle:\n\n${confession}\n\nMood: ${mood}/10\nEmotional Phase: ${emotionalPhase}`,
-        },
-      ],
-    });
+    let miracleText = "";
+    try {
+      const completion = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        system: MAR_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Transform this confession into a miracle:\n\n${confession}\n\nMood: ${mood}/10\nEmotional Phase: ${emotionalPhase}`,
+          },
+        ],
+      });
 
-    const miracleText = completion.content[0].type === "text" 
-      ? completion.content[0].text 
-      : "Your courage in sharing is the first step toward transformation.";
+      miracleText = completion.content[0].type === "text" 
+        ? completion.content[0].text 
+        : "Your courage in sharing is the first step toward transformation.";
+    } catch (aiError) {
+      console.error("AI generation failed:", aiError);
+      miracleText = "Your courage in sharing is the first step toward transformation. You are not alone.";
+    }
 
-    // SAVE MIRACLE TO DATABASE
-    const miracleRecord = await prisma.miracle.create({
-      data: {
-        confessionId: confessionRecord.id,
-        content: miracleText,
-        isPublic: shareToFeed,
-        blessings: 0,
-      },
-    });
+    // TRY to save miracle to database
+    if (confessionRecord) {
+      try {
+        miracleRecord = await prisma.miracle.create({
+          data: {
+            confessionId: confessionRecord.id,
+            content: miracleText,
+            isPublic: shareToFeed,
+            blessings: 0,
+          },
+        });
+      } catch (dbError) {
+        console.error("Miracle DB save failed (continuing anyway):", dbError);
+      }
+    }
 
     // RETURN RESPONSE
     return NextResponse.json({
@@ -130,15 +149,34 @@ export async function POST(request: NextRequest) {
       miracle: miracleText,
       crisis: crisisDetection.isCrisis,
       crisisLevel: crisisDetection.level,
-      confessionId: confessionRecord.id,
-      miracleId: miracleRecord.id,
+      confessionId: confessionRecord?.id,
+      miracleId: miracleRecord?.id,
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
     });
 
   } catch (error) {
     console.error("Error in confession API:", error);
     return NextResponse.json(
-      { error: "Failed to process confession" },
+      { 
+        error: "Failed to process confession",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     );
   }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+  });
 }

@@ -49,6 +49,13 @@ export default function HomePage() {
             >
               See Miracles ✨
             </Link>
+
+            <Link 
+              href="/pricing"
+              className="px-8 py-4 border-2 border-cyan-500 text-cyan-300 font-semibold rounded-lg hover:bg-cyan-500/10 transition-colors text-lg w-full sm:w-auto"
+            >
+              View Pricing 💎
+            </Link>
           </div>
 
           {/* STATS */}
